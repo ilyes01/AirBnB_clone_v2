@@ -1,40 +1,57 @@
 #!/usr/bin/python3
 """
-Distributing an archive to your web servers, using the function do_deploy.
+a Fabric script that generates a .tgz archive
+from the contents of the web_static folder of the AirBnB Clone repo
 """
-import fabric
-from fabric.api import local, lcd, put, env, run
-from datetime import datetime
+from fabric.operations import local, put, run
+from datetime import datetime as d
+from fabric.api import *
+
+env.hosts = ['34.74.120.150', '54.173.196.75']
 
 
-env.hosts = ["3.91.44.133", "35.227.49.226"]
-env.user = ["ubuntu"]
+def do_pack():
+    """ generates a .tgz archive """
+    name = "versions/web_static_" + str(d.now().year)
+    name += str(d.now().month) + str(d.now().day) + str(d.now().hour)
+    name += str(d.now().minute) + str(d.now().second) + ".tgz"
+    result = local("mkdir -p versions; tar -cvzf \"%s\" web_static" % name)
+    if result.failed:
+        return NULL
+    else:
+        return name
 
 
 def do_deploy(archive_path):
-    """
-    Distributes an archive to your web servers.
-    """
-    name = archive_path.split('/')[1]
-    nne = name.split(".")[0]
-    rel = "/data/web_static/releases"
-    cur = "/data/web_static/current"
-    if not put(archive_path, "/tmp/").succeeded:
+    """ uploads the archive to servers """
+    destination = "/tmp/" + archive_path.split("/")[-1]
+    result = put(archive_path, "/tmp/")
+    if result.failed:
         return False
-    if not run("mkdir -p {}/{}/".format(rel, nne)).succeeded:
+    filename = archive_path.split("/")[-1]
+    f = filename.split(".")[0]
+    directory = "/data/web_static/releases/" + f
+    run_res = run("mkdir -p \"%s\"" % directory)
+    if run_res.failed:
         return False
-    if not run("tar -xzf /tmp/{} -C {}/{}/".format(name, rel, nne)).succeeded:
+    run_res = run("tar -xzf %s -C %s" % (destination, directory))
+    if run_res.failed:
         return False
-    if not run("rm /tmp/{}".format(name)).succeeded:
+    run_res = run("rm %s" % destination)
+    if run_res:
         return False
-    what_to_mv = "{}/{}/web_static/*".format(rel, nne)
-    where_to_mv = "{}/{}/".format(rel, nne)
-    if not run("mv {} {}".format(what_to_mv, where_to_mv)).succeeded:
+    web = directory + "/web_static/*"
+    run_res = run("mv %s %s" % (web, directory))
+    if run_res.failed:
         return False
-    if not run("rm -rf {}/{}/web_static".format(rel, nne)).succeeded:
+    web = web[0:-2]
+    run_res = run("rm -rf %s" % web)
+    if run_res.failed:
         return False
-    if not run("rm -rf /data/web_static/current").succeeded:
+    run_res = run("rm -rf /data/web_static/current")
+    if run_res.failed:
         return False
-    if not run("ln -s {}/{}/ {}".format(rel, nne, cur)).succeeded:
+    run_res = run("ln -s %s /data/web_static/current" % directory)
+    if run_res.failed:
         return False
     return True
